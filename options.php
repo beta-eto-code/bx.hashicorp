@@ -250,24 +250,25 @@ $actionUrl = $APPLICATION->GetCurPage() ."?mid=".urlencode($mid)."&lang=".LANGUA
         )
     }
 
-    const tokenAuth = '<?= TokenAuthenticationStrategy::class ?>';
-    const userPassAuth = '<?= UserPassAuthenticationStrategy::class ?>';
-    const ldapAuth = '<?= LdapAuthenticationStrategy::class ?>';
-    const oktaAuth = '<?= OktaAuthenticationStrategy::class ?>';
-    const appAuth = '<?= AppRoleAuthenticationStrategy::class ?>';
-    const radiusAuth = '<?= RadiusAuthenticationStrategy::class ?>';
+    const tokenAuth = "<?= str_replace('\\', '\\\\', TokenAuthenticationStrategy::class) ?>";
+    const userPassAuth = '<?= str_replace('\\', '\\\\', UserPassAuthenticationStrategy::class) ?>';
+    const ldapAuth = '<?= str_replace('\\', '\\\\', LdapAuthenticationStrategy::class) ?>';
+    const oktaAuth = '<?= str_replace('\\', '\\\\', OktaAuthenticationStrategy::class) ?>';
+    const appAuth = '<?= str_replace('\\', '\\\\', AppRoleAuthenticationStrategy::class) ?>';
+    const radiusAuth = '<?= str_replace('\\', '\\\\', RadiusAuthenticationStrategy::class) ?>';
+    console.log(tokenAuth);
 
     function visibleSwitcher(hideList, showList) {
         for (let item of hideList) {
-            item.classList.add('hidden');
+            item.closest('tr').classList.add('hidden');
         }
         for (let item of showList) {
-            item.classList.remove('hidden');
+            item.closest('tr').classList.remove('hidden');
         }
     }
 
     window.addEventListener('DOMContentLoaded', function() {
-        let selectAuthType = document.querySelector("input[name='AUTH_TYPE']");
+        let selectAuthType = document.querySelector("select[name='AUTH_TYPE']");
         let usernameInput = document.querySelector("input[name='USERNAME']");
         let passwordInput = document.querySelector("input[name='PASSWORD']");
         let tokenInput = document.querySelector("input[name='TOKEN']");
@@ -301,6 +302,6 @@ $actionUrl = $APPLICATION->GetCurPage() ."?mid=".urlencode($mid)."&lang=".LANGUA
 </script>
 <style>
     .hidden {
-        display: none;
+        display: none !important;
     }
 </style>
