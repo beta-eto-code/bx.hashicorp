@@ -25,6 +25,7 @@
         </UndefinedClass>
         <InvalidThrow>
             <errorLevel type="suppress">
+                <referencedClass name="Psr\Cache\InvalidArgumentException" />
                 <referencedClass name="Bx\HashiCorp\InvalidSettingsException" />
             </errorLevel>
         </InvalidThrow>

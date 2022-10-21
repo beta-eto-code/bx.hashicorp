@@ -2,20 +2,26 @@
 
 namespace Bx\HashiCorp;
 
+use Bitrix\Main\ArgumentNullException;
+use Bitrix\Main\ArgumentOutOfRangeException;
 use Bitrix\Main\Config\Option;
+use BitrixPSR16\Cache;
 use BitrixPSR17\HttpFactory;
+use Bx\OptionHolder\CachedOptionHolder;
 use Bx\OptionHolder\OptionHolderInterface;
 use Exception;
 use GuzzleHttp\Psr7\Uri;
+use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Log\LoggerInterface;
+use Psr\SimpleCache\CacheInterface;
 use Vault\AuthenticationStrategies\AbstractPathAuthenticationStrategy;
 use Vault\AuthenticationStrategies\AppRoleAuthenticationStrategy;
 use Vault\AuthenticationStrategies\AuthenticationStrategy;
 use Vault\AuthenticationStrategies\TokenAuthenticationStrategy;
 use Vault\BaseClient;
-use Vault\CachedClient;
 use Vault\Client;
+use Vault\Exceptions\RuntimeException;
 
 class Factory
 {
@@ -25,8 +31,37 @@ class Factory
      * @param string $defaultKeyspace
      * @param ClientInterface|null $httpClient
      * @param LoggerInterface|null $logger
+     * @param CacheInterface|null $cache
+     * @param int $ttl
      * @return OptionHolderInterface
-     * @throws Exception
+     * @throws ArgumentNullException
+     * @throws ArgumentOutOfRangeException
+     * @throws ClientExceptionInterface
+     * @throws InvalidSettingsException
+     * @throws RuntimeException
+     */
+    public static function crateCached(
+        string $defaultKeyspace,
+        ?ClientInterface $httpClient = null,
+        ?LoggerInterface $logger = null,
+        ?CacheInterface $cache = null,
+        int $ttl = 3600
+    ): OptionHolderInterface {
+        $cache = $cache ?? new Cache($ttl);
+        $optionHolder = static::create($defaultKeyspace, $httpClient, $logger);
+        return new CachedOptionHolder($optionHolder, $cache, $ttl);
+    }
+
+    /**
+     * @param string $defaultKeyspace
+     * @param ClientInterface|null $httpClient
+     * @param LoggerInterface|null $logger
+     * @return OptionHolderInterface
+     * @throws ArgumentNullException
+     * @throws ArgumentOutOfRangeException
+     * @throws ClientExceptionInterface
+     * @throws InvalidSettingsException
+     * @throws RuntimeException
      */
     public static function create(
         string $defaultKeyspace,
@@ -38,68 +73,21 @@ class Factory
     }
 
     /**
-     * @param string $defaultKeyspace
-     * @param ClientInterface|null $httpClient
-     * @param LoggerInterface|null $logger
-     * @return OptionHolderInterface
-     * @throws InvalidSettingsException
-     */
-    public static function crateCached(
-        string $defaultKeyspace,
-        ?ClientInterface $httpClient = null,
-        ?LoggerInterface $logger = null
-    ): OptionHolderInterface {
-        $client = static::createCachedClient($httpClient, $logger);
-        return new HashiCorpOptionHolder($client, $defaultKeyspace);
-    }
-
-    /**
      * @param ClientInterface|null $httpClient
      * @param LoggerInterface|null $logger
      * @return BaseClient
+     * @throws ArgumentNullException
+     * @throws ArgumentOutOfRangeException
+     * @throws ClientExceptionInterface
+     * @throws InvalidSettingsException
+     * @throws RuntimeException
      * @throws Exception
+     * @psalm-suppress MoreSpecificReturnType,UndefinedDocblockClass
      */
     private static function createClient(
         ?ClientInterface $httpClient = null,
         ?LoggerInterface $logger = null
     ): BaseClient {
-        return static::createClientFromClass(Client::class, $httpClient, $logger);
-    }
-
-    /**
-     * @param ClientInterface|null $httpClient
-     * @param LoggerInterface|null $logger
-     * @return BaseClient
-     * @throws InvalidSettingsException
-     * @psalm-suppress UndefinedDocblockClass
-     */
-    private static function createCachedClient(
-        ?ClientInterface $httpClient = null,
-        ?LoggerInterface $logger = null
-    ): BaseClient {
-        return static::createClientFromClass(CachedClient::class, $httpClient, $logger);
-    }
-
-    /**
-     * @param class-string<BaseClient> $class
-     * @param ClientInterface|null $httpClient
-     * @param LoggerInterface|null $logger
-     * @return BaseClient
-     * @throws InvalidSettingsException
-     * @throws Exception
-     * @psalm-suppress MoreSpecificReturnType,UndefinedDocblockClass
-     */
-    private static function createClientFromClass(
-        string $class,
-        ?ClientInterface $httpClient = null,
-        ?LoggerInterface $logger = null
-    ): BaseClient {
-        /**
-         * @psalm-suppress RedundantConditionGivenDocblockType
-         */
-        if (!($class instanceof BaseClient)) {
-            throw new Exception('[hashiCorp] invalid client class');
-        }
 
         $uriString = static::getOptionValue('URI');
         if (empty($uriString)) {
@@ -108,10 +96,7 @@ class Factory
 
         $httpFactory = new HttpFactory();
         $httpClient = $httpClient ?? new \BitrixPSR18\Client();
-        /**
-         * @psalm-suppress UndefinedClass
-         */
-        $client = new $class(
+        $client = new Client(
             new Uri($uriString),
             $httpClient,
             $httpFactory,
@@ -119,15 +104,8 @@ class Factory
             $logger
         );
 
-        if (!($client instanceof BaseClient)) {
-            throw new Exception('[hashiCorp] invalid client class');
-        }
-
         $nameSpace = static::getOptionValue('NAMESPACE');
         if (!empty($nameSpace)) {
-            /**
-             * @psalm-suppress UndefinedMethod
-             */
             $client->setNamespace($nameSpace);
         }
 
@@ -135,7 +113,7 @@ class Factory
         /**
          * @psalm-suppress UndefinedMethod
          */
-        $client->setAuthenticationStrategy($authStrategy);
+        $client->setAuthenticationStrategy($authStrategy)->authenticate();
         return $client;
     }
 
@@ -145,28 +123,28 @@ class Factory
      */
     private static function createAuthStrategy(): AuthenticationStrategy
     {
-        $authType = static::getOptionValue('AUT_TYPE');
+        $authType = static::getOptionValue('AUTH_TYPE');
         if (empty($authType)) {
             throw new InvalidSettingsException('[hashiCorp] auth type is not select');
         }
 
         $invalidAuthTypeException = new InvalidSettingsException('[hashiCorp] invalid auth type');
-        if (class_exists($authType)) {
+        if (!class_exists($authType)) {
             throw $invalidAuthTypeException;
         }
 
-        if ($authType instanceof AbstractPathAuthenticationStrategy) {
+        if (is_a($authType, AbstractPathAuthenticationStrategy::class, true)) {
             /**
              * @psalm-suppress InvalidArgument
              */
             return static::createAuthStrategyWithUsernamePassword($authType);
         }
 
-        if ($authType instanceof TokenAuthenticationStrategy) {
+        if (is_a($authType, TokenAuthenticationStrategy::class, true)) {
             return static::createAuthStrategyWithToken();
         }
 
-        if ($authType instanceof AppRoleAuthenticationStrategy) {
+        if (is_a($authType, AppRoleAuthenticationStrategy::class, true)) {
             return static::createAuthStrategyWithAppCredential();
         }
 
@@ -184,7 +162,7 @@ class Factory
         /**
          * @psalm-suppress RedundantConditionGivenDocblockType
          */
-        if (!($className instanceof AbstractPathAuthenticationStrategy)) {
+        if (!is_a($className, AbstractPathAuthenticationStrategy::class, true)) {
             throw new InvalidSettingsException('[hashiCorp] invalid auth strategy');
         }
 
@@ -199,7 +177,7 @@ class Factory
         }
 
         /**
-         * @psalm-suppress UndefinedClass,LessSpecificReturnStatement
+         * @psalm-suppress UndefinedClass,LessSpecificReturnStatement,UnsafeInstantiation
          */
         return new $className($username, $password);
     }
@@ -240,6 +218,8 @@ class Factory
     /**
      * @param string $key
      * @return mixed
+     * @throws ArgumentNullException
+     * @throws ArgumentOutOfRangeException
      */
     private static function getOptionValue(string $key)
     {

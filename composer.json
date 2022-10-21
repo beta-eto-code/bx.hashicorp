@@ -15,12 +15,17 @@
         "beta/bitrix-option-holder": "^1.0",
         "csharpru/vault-php": "^4.3",
         "beta/bitrix-psr17": "^1.0",
-        "beta/bitrix-psr18": "^1.0"
+        "beta/bitrix-psr18": "^1.0",
+        "beta/bitrix-psr16": "^1.0"
     },
     "repositories": [
         {
             "type": "vcs",
             "url": "git@github.com:beta-eto-code/bitrix-option-holder.git"
+        },
+        {
+            "type": "vcs",
+            "url": "git@github.com:beta-eto-code/bitrix-psr16.git"
         }
     ],
     "require-dev": {
