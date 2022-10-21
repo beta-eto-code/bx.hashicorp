@@ -4,20 +4,30 @@ namespace Bx\HashiCorp;
 
 use Bitrix\Main\Error;
 use Bitrix\Main\Result;
+use Bx\HashiCorp\Client\HashiCorpVaultClientInterface;
 use Bx\OptionHolder\OptionHolderInterface;
-use Psr\Http\Client\ClientExceptionInterface;
 use Throwable;
-use Vault\BaseClient;
 
 class HashiCorpOptionHolder implements OptionHolderInterface
 {
-    private BaseClient $client;
+    private HashiCorpVaultClientInterface $client;
     private string $defaultKeySpace;
+    /**
+     * @var RWHandlerInterface
+     */
+    private $rwHandler;
 
-    public function __construct(BaseClient $client, string $defaultKeySpace)
-    {
+    public function __construct(
+        HashiCorpVaultClientInterface $client,
+        string $defaultKeySpace,
+        int $kvEngineVersion = 2
+    ) {
         $this->client = $client;
         $this->defaultKeySpace = $defaultKeySpace;
+        /**
+         * @psalm-suppress InvalidPropertyAssignmentValue
+         */
+        $this->rwHandler = $kvEngineVersion > 1 ? RWHandlerV2::class : RWHandlerV1::class;
     }
 
     public function getDefaultKeySpace(): string
@@ -25,17 +35,21 @@ class HashiCorpOptionHolder implements OptionHolderInterface
         return $this->defaultKeySpace;
     }
 
+    public function setRWHandler(RWHandlerInterface $rwHandler): void
+    {
+        $this->rwHandler = $rwHandler;
+    }
+
     /**
      * @param string $key
      * @param string|null $keySpace
      * @param mixed $defaultValue
      * @return mixed|null
-     * @throws ClientExceptionInterface
      */
     public function getOptionValue(string $key, ?string $keySpace = null, $defaultValue = null)
     {
-        $path = $keySpace ?: $this->defaultKeySpace;
-        $data = $this->getDataByPath($path) ?? [];
+        $keySpace = $keySpace ?: $this->defaultKeySpace;
+        $data = $this->rwHandler::getDataFromKeySpace($this->client, $keySpace);
         return $data[$key] ?? $defaultValue;
     }
 
@@ -49,38 +63,12 @@ class HashiCorpOptionHolder implements OptionHolderInterface
     {
         $result = new Result();
         try {
-            $path = $keySpace ?: $this->defaultKeySpace;
-            $data = $this->getDataByPath($path) ?? [];
-            $data[$key] = $value;
-            /**
-             * @psalm-suppress UndefinedMethod
-             */
-            $this->client->write($path, $data);
+            $keySpace = $keySpace ?: $this->defaultKeySpace;
+            $this->rwHandler::setDataToKeySpace($this->client, $keySpace, [$key => $value]);
         } catch (Throwable $e) {
             return $result->addError(new Error($e->getMessage()));
         }
 
         return $result;
-    }
-
-    /**
-     * @param string $path
-     * @return array|null
-     * @throws ClientExceptionInterface
-     */
-    private function getDataByPath(string $path): ?array
-    {
-        $path = "/secret/data/$path";
-        try {
-            /**
-             * @psalm-suppress UndefinedMethod
-             */
-            $response = $this->client->read($path);
-            $data = $response->getData();
-            return $data['data'] ?? null;
-        } catch (Throwable $e) {
-        }
-
-        return null;
     }
 }

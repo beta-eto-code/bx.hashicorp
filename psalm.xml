@@ -21,12 +21,13 @@
             <errorLevel type="suppress">
                 <referencedClass name="Bitrix\*" />
                 <referencedClass name="Bx\HashiCorp\InvalidSettingsException" />
+                <referencedClass name="Bx\HashiCorp\Client\HashiCorpVaultClientInterface" />
+                <referencedClass name="Bx\HashiCorp\Client\CSharpRuClientAdapter" />
             </errorLevel>
         </UndefinedClass>
         <InvalidThrow>
             <errorLevel type="suppress">
                 <referencedClass name="Psr\Cache\InvalidArgumentException" />
-                <referencedClass name="Bx\HashiCorp\InvalidSettingsException" />
             </errorLevel>
         </InvalidThrow>
     </issueHandlers>
