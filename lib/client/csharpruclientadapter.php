@@ -24,6 +24,7 @@ use Vault\Exceptions\RuntimeException;
 class CSharpRuClientAdapter implements HashiCorpVaultClientInterface
 {
     private BaseClient $client;
+    private bool $isAuthenticated = false;
 
     public function __construct(BaseClient $client)
     {
@@ -67,7 +68,7 @@ class CSharpRuClientAdapter implements HashiCorpVaultClientInterface
         /**
          * @psalm-suppress UndefinedMethod
          */
-        $client->setAuthenticationStrategy($authStrategy)->authenticate();
+        $client->setAuthenticationStrategy($authStrategy);
         return new CSharpRuClientAdapter($client);
     }
 
@@ -184,9 +185,12 @@ class CSharpRuClientAdapter implements HashiCorpVaultClientInterface
      * @param string $path
      * @return array|null
      * @throws ClientExceptionInterface
+     * @throws InvalidArgumentException
+     * @throws RuntimeException
      */
     public function getDataByPath(string $path): ?array
     {
+        $this->authenticate();
         /**
          * @psalm-suppress UndefinedMethod
          */
@@ -199,12 +203,27 @@ class CSharpRuClientAdapter implements HashiCorpVaultClientInterface
      * @param array $data
      * @return void
      * @throws ClientExceptionInterface
+     * @throws InvalidArgumentException
+     * @throws RuntimeException
      */
     public function setDataByPath(string $path, array $data): void
     {
+        $this->authenticate();
         /**
          * @psalm-suppress UndefinedMethod
          */
         $this->client->write($path, $data);
+    }
+
+    /**
+     * @throws ClientExceptionInterface
+     * @throws RuntimeException
+     * @throws InvalidArgumentException
+     */
+    private function authenticate()
+    {
+        if ($this->isAuthenticated === false && $this->client instanceof Client) {
+            $this->client->authenticate();
+        }
     }
 }
