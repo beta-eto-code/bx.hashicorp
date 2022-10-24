@@ -216,11 +216,12 @@ class CSharpRuClientAdapter implements HashiCorpVaultClientInterface
     }
 
     /**
+     * @return void
      * @throws ClientExceptionInterface
-     * @throws RuntimeException
      * @throws InvalidArgumentException
+     * @throws RuntimeException
      */
-    private function authenticate()
+    private function authenticate(): void
     {
         if ($this->isAuthenticated === false && $this->client instanceof Client) {
             $this->client->authenticate();
