@@ -176,7 +176,7 @@ class CSharpRuClientAdapter implements HashiCorpVaultClientInterface
      * @throws ArgumentNullException
      * @throws ArgumentOutOfRangeException
      */
-    private static function getOptionValue(string $key)
+    public static function getOptionValue(string $key)
     {
         return Option::get('bx.hashicorp', $key) ?: null;
     }

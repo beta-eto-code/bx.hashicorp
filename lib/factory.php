@@ -62,9 +62,52 @@ class Factory
         ?LoggerInterface $logger = null
     ): OptionHolderInterface {
         $client = CSharpRuClientAdapter::initFromModuleOptions($httpClient, $logger);
+        $kvPath = static::getKvPathFromOptions();
+        $keySpaceMap = static::getKeySpaceMapFromOptions();
+
         /**
          * @psalm-suppress TooManyArguments
          */
-        return new HashiCorpOptionHolder($client, $defaultKeyspace, $kvEngineVersion);
+        return new HashiCorpOptionHolder($client, $defaultKeyspace, $kvEngineVersion, $kvPath, $keySpaceMap);
+    }
+
+    /**
+     * @throws ArgumentNullException
+     * @throws ArgumentOutOfRangeException
+     */
+    private static function getKvPathFromOptions(): string
+    {
+        $kvPathFromOption = trim(CSharpRuClientAdapter::getOptionValue('KV_PATH') ?: '');
+        return $kvPathFromOption ?: 'secret';
+    }
+
+    /**
+     * @throws ArgumentNullException
+     * @throws ArgumentOutOfRangeException
+     */
+    private static function getKeySpaceMapFromOptions(): array
+    {
+        $keySpaseMapFromOption = CSharpRuClientAdapter::getOptionValue('KEYSPACE_MAP') ?: '';
+        if (empty($keySpaseMapFromOption)) {
+            return [];
+        }
+
+        $decodedValue = json_decode($keySpaseMapFromOption, true) ?: null;
+        if (empty($decodedValue) || !is_array($decodedValue)) {
+            return [];
+        }
+
+        $resultMap = [];
+        foreach ($decodedValue as $item) {
+            $form = $item['from'] ?: null;
+            $to  = $item['to'] ?: null;
+            if (empty($form) || empty($to)) {
+                continue;
+            }
+
+            $resultMap[$form] = $to;
+        }
+
+        return $resultMap;
     }
 }

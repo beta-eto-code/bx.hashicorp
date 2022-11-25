@@ -16,11 +16,15 @@ class HashiCorpOptionHolder implements OptionHolderInterface
      * @var RWHandlerInterface
      */
     private $rwHandler;
+    private string $kvPath;
+    private array $keySpaceMap;
 
     public function __construct(
         HashiCorpVaultClientInterface $client,
         string $defaultKeySpace,
-        int $kvEngineVersion = 2
+        int $kvEngineVersion = 2,
+        string $kvPath = 'secret',
+        array $keySpaceMap = []
     ) {
         $this->client = $client;
         $this->defaultKeySpace = $defaultKeySpace;
@@ -28,6 +32,8 @@ class HashiCorpOptionHolder implements OptionHolderInterface
          * @psalm-suppress InvalidPropertyAssignmentValue
          */
         $this->rwHandler = $kvEngineVersion > 1 ? RWHandlerV2::class : RWHandlerV1::class;
+        $this->kvPath = $kvPath;
+        $this->keySpaceMap = $keySpaceMap;
     }
 
     public function getDefaultKeySpace(): string
@@ -49,7 +55,12 @@ class HashiCorpOptionHolder implements OptionHolderInterface
     public function getOptionValue(string $key, ?string $keySpace = null, $defaultValue = null)
     {
         $keySpace = $keySpace ?: $this->defaultKeySpace;
-        $data = $this->rwHandler::getDataFromKeySpace($this->client, $keySpace);
+        $data = $this->rwHandler::getDataFromKeySpace(
+            $this->client,
+            $keySpace,
+            $this->kvPath,
+            $this->keySpaceMap
+        );
         return $data[$key] ?? $defaultValue;
     }
 
@@ -64,7 +75,13 @@ class HashiCorpOptionHolder implements OptionHolderInterface
         $result = new Result();
         try {
             $keySpace = $keySpace ?: $this->defaultKeySpace;
-            $this->rwHandler::setDataToKeySpace($this->client, $keySpace, [$key => $value]);
+            $this->rwHandler::setDataToKeySpace(
+                $this->client,
+                $keySpace,
+                [$key => $value],
+                $this->kvPath,
+                $this->keySpaceMap
+            );
         } catch (Throwable $e) {
             return $result->addError(new Error($e->getMessage()));
         }

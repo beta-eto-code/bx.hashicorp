@@ -3,7 +3,7 @@
 global $USER;
 global $APPLICATION;
 
-if(!$USER->IsAdmin()) {
+if (!$USER->IsAdmin()) {
     return;
 }
 
@@ -46,21 +46,33 @@ $options = [
             'TOKEN' => 'Ключ доступа (token)',
             'ROLE_ID' => 'Идентификатор приложения (roleId)',
             'SECRET_ID' => 'Ключ приложения (secretId)',
+            'KV_PATH' => 'Путь к KV хранилищу',
+            'KEYSPACE_MAP' => [
+                'multiple' => true,
+                'name' => 'KEYSPACE_MAP',
+                'type' => 'map',
+                'label' => 'Алиасы к пространствам ключей',
+            ],
         ],
     ],
 ];
 
+$optionsMap = [];
 $optionJson = [];
 $optionNames = [];
 foreach ($options as $optionTab) {
     foreach ($optionTab['options'] as $name => $value) {
         if (is_string($value)) {
             $optionNames[] = $name;
-        }
-        else if (is_array($value)) {
+        } elseif (is_array($value)) {
             $name = $value['name'] ?? null;
             if ($name) {
                 $optionNames[] = $name;
+
+                $isMap = ($value['type'] ?? '') === 'map';
+                if ($isMap) {
+                    $optionsMap[] = $name;
+                }
 
                 $multiple = (bool) ($value['multiple'] ?? false);
                 if ($multiple) {
@@ -78,7 +90,30 @@ if ($isSave && check_bitrix_sessid()) {
         if (is_array($value)) {
             $value = array_filter($value);
         }
-        if (in_array($name, $optionJson)) {
+
+        $isMultiple = in_array($name, $optionJson);
+        if (in_array($name, $optionsMap)) {
+            $newValue = [];
+            if ($isMultiple) {
+                $fromValues = (array)($value['from'] ?? []);
+                $toValues = (array)($value['to'] ?? []);
+                foreach ($fromValues as $i => $fromValue) {
+                    if (empty($fromValue) || empty($toValues[$i])) {
+                        continue;
+                    }
+
+                    $newValue[] = [
+                        'from' => $fromValue,
+                        'to' => $toValues[$i] ?? '',
+                    ];
+                }
+            } else {
+                $newValue['from'] = $value['from'] ?? '';
+                $newValue['to'] = $value['to'] ?? '';
+            }
+
+            $value = json_encode($newValue);
+        } elseif ($isMultiple) {
             $value = json_encode($value);
         }
         Option::set($mid, $name, "{$value}");
@@ -86,18 +121,18 @@ if ($isSave && check_bitrix_sessid()) {
 }
 
 
-$aTabs = array_map(function($item) {
+$aTabs = array_map(function ($item) {
     static $i = 0;
     return [
         'ICON' => '',
-        'DIV' => 'tab'.($i++),
+        'DIV' => 'tab' . ($i++),
         'TAB' => $item['tab'],
         'TITLE' => $item['tab'],
     ];
 }, $options);
 
 $tabControl = new CAdminTabControl('tabControl', $aTabs);
-$actionUrl = $APPLICATION->GetCurPage() ."?mid=".urlencode($mid)."&lang=".LANGUAGE_ID;
+$actionUrl = $APPLICATION->GetCurPage() . "?mid=" . urlencode($mid) . "&lang=" . LANGUAGE_ID;
 
 ?>
 <form method="post" action="<?= $actionUrl ?>">
@@ -130,6 +165,10 @@ $actionUrl = $APPLICATION->GetCurPage() ."?mid=".urlencode($mid)."&lang=".LANGUA
             }
 
             $optionValue = (string) Option::get($mid, $optionName);
+            $decodedValue = json_decode($optionValue, true) ?? null;
+            if ($decodedValue) {
+                $optionValue = $decodedValue;
+            }
             ?>
             <tr>
                 <td class="adm-detail-content-cell-l">
@@ -142,7 +181,7 @@ $actionUrl = $APPLICATION->GetCurPage() ."?mid=".urlencode($mid)."&lang=".LANGUA
                             $selectValues = $value['values'];
                             $isAssocSelectValues = !empty(array_diff_assoc(
                                 array_keys($selectValues),
-                                range(0, count($selectValues)-1)
+                                range(0, count($selectValues) - 1)
                             ));
 
                             $multiple = (bool) ($value['multiple'] ?? false);
@@ -152,19 +191,17 @@ $actionUrl = $APPLICATION->GetCurPage() ."?mid=".urlencode($mid)."&lang=".LANGUA
                                 $optionName .= "[]";
                             }
 
-                            echo "<select class='typeselect' name='{$optionName}' size='{$size}' ".($multiple ? 'multiple' : '').">";
+                            echo "<select class='typeselect' name='{$optionName}' size='{$size}' " . ($multiple ? 'multiple' : '') . ">";
                             foreach ($selectValues as $key => $item) {
                                 if ($isAssocSelectValues) {
                                     $selectOptionValue = $key;
-                                }
-                                else {
+                                } else {
                                     $selectOptionValue = $item;
                                 }
 
                                 if ($multiple) {
                                     $selected = in_array($selectOptionValue, $optionValue) ? "selected" : "";
-                                }
-                                else {
+                                } else {
                                     $selected = "{$selectOptionValue}" === "{$optionValue}" ? "selected" : "";
                                 }
 
@@ -182,7 +219,27 @@ $actionUrl = $APPLICATION->GetCurPage() ."?mid=".urlencode($mid)."&lang=".LANGUA
                             ";
                             break;
                         case 'textarea':
-                            echo "<textarea name='{$optionName}' cols='".($value['cols'] ?? 30)."' rows='".($value['rows'] ?? 5)."'>{$optionValue}</textarea>";
+                            echo "<textarea name='{$optionName}' cols='" . ($value['cols'] ?? 30) . "' rows='" . ($value['rows'] ?? 5) . "'>{$optionValue}</textarea>";
+                            break;
+                        case 'map':
+                            $multiple = (bool) ($value['multiple'] ?? false);
+                            if ($multiple) {
+                                foreach ((array)$optionValue as $item) {
+                                    if (empty($item)) {
+                                        continue;
+                                    }
+                                    echo "<div><input name='{$optionName}[from][]' value='{$item['from']}'><input name='{$optionName}[to][]' value='{$item['to']}'></div>";
+                                }
+                                echo "<div>
+								<input type='button' value='Добавить' onclick='addTemplateRow(this, {});'>
+								<div class='jsTemplateRow' style='display:none;'>
+                                    <input name='{$optionName}[from][]' value=''>
+                                    <input name='{$optionName}[to][]' value=''>
+								</div>
+								</div>";
+                            } else {
+                                echo "<div><input name='{$optionName}[from]' value='{$optionValue['from']}'><input name='{$optionName}[to]' value='{$optionValue['to']}'></div>";
+                            }
                             break;
                         default:
                             $multiple = (bool) ($value['multiple'] ?? false);
@@ -200,8 +257,7 @@ $actionUrl = $APPLICATION->GetCurPage() ."?mid=".urlencode($mid)."&lang=".LANGUA
 									<input type='{$optionType}' name='{$optionName}' value=''>
 								</div>
 								</div>";
-                            }
-                            else {
+                            } else {
                                 echo "<input type='{$optionType}' name='{$optionName}' value='{$optionValue}'>";
                             }
                             break;
@@ -210,13 +266,13 @@ $actionUrl = $APPLICATION->GetCurPage() ."?mid=".urlencode($mid)."&lang=".LANGUA
                 </td>
             </tr>
             <?php
-        }
-    }
+            }
+            }
 
-    $tabControl->Buttons([]);
-    $tabControl->End();
+            $tabControl->Buttons([]);
+            $tabControl->End();
 
-    ?>
+            ?>
 </form>
 <style media="screen">
     .adm-detail-content-cell-l {
